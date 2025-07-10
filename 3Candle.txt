@@ -1,0 +1,75 @@
+using System;
+using cAlgo.API;
+using cAlgo.API.Indicators;
+using cAlgo.API.Internals;
+
+namespace cAlgo.Indicators
+{
+    [Indicator(IsOverlay = true, AccessRights = AccessRights.None)]
+    public class ReversalSignalConfigurable : Indicator
+    {
+        private IchimokuKinkoHyo ichimoku;
+
+        [Parameter("Min Close Above High (%)", DefaultValue = 0.0)]
+        public double MinAboveHighPercent { get; set; }
+
+        [Parameter("Min Close Below Low (%)", DefaultValue = 0.0)]
+        public double MinBelowLowPercent { get; set; }
+
+        [Parameter("Require Tenkan Cross", DefaultValue = true)]
+        public bool RequireTenkanCross { get; set; }
+
+        [Parameter("Bullish Arrow Color", DefaultValue = "White")]
+        public string BullColor { get; set; }
+
+        [Parameter("Bearish Arrow Color", DefaultValue = "Red")]
+        public string BearColor { get; set; }
+
+        private string lastDirection = "None";
+
+        protected override void Initialize()
+        {
+            ichimoku = Indicators.IchimokuKinkoHyo(9, 26, 52);
+        }
+
+        public override void Calculate(int index)
+        {
+            if (index < 26 || index < 2)
+                return;
+
+            double tenkan = ichimoku.TenkanSen[index];
+
+            var o = new[] { Bars.OpenPrices[index - 2], Bars.OpenPrices[index - 1], Bars.OpenPrices[index] };
+            var c = new[] { Bars.ClosePrices[index - 2], Bars.ClosePrices[index - 1], Bars.ClosePrices[index] };
+            var h = new[] { Bars.HighPrices[index - 2], Bars.HighPrices[index - 1], Bars.HighPrices[index] };
+            var l = new[] { Bars.LowPrices[index - 2], Bars.LowPrices[index - 1], Bars.LowPrices[index] };
+
+            double aboveFactor = 1 + MinAboveHighPercent / 100.0;
+            double belowFactor = 1 - MinBelowLowPercent / 100.0;
+
+            bool crossedUp = c[0] > tenkan || c[1] > tenkan || c[2] > tenkan;
+            bool crossedDown = c[0] < tenkan || c[1] < tenkan || c[2] < tenkan;
+
+            bool bullishPattern = c[0] > o[0] &&
+                                  c[1] > o[1] && c[1] > h[0] * aboveFactor &&
+                                  c[2] > o[2] && c[2] > h[1] * aboveFactor;
+
+            bool bearishPattern = c[0] < o[0] &&
+                                  c[1] < o[1] && c[1] < l[0] * belowFactor &&
+                                  c[2] < o[2] && c[2] < l[1] * belowFactor;
+
+            if (bullishPattern && (!RequireTenkanCross || crossedUp) && lastDirection != "Bullish")
+            {
+                Chart.DrawIcon("Bull_" + index, ChartIconType.UpArrow, index - 2, l[0] - Symbol.TickSize * 5, Color.FromName(BullColor));
+                lastDirection = "Bullish";
+                return;
+            }
+
+            if (bearishPattern && (!RequireTenkanCross || crossedDown) && lastDirection != "Bearish")
+            {
+                Chart.DrawIcon("Bear_" + index, ChartIconType.DownArrow, index - 2, h[0] + Symbol.TickSize * 5, Color.FromName(BearColor));
+                lastDirection = "Bearish";
+            }
+        }
+    }
+}
